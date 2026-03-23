@@ -1,0 +1,40 @@
+Execute my morning trading routine:
+
+PART 1: Check Option Alpha
+- Go to Option Alpha
+- Check all bot statuses
+- Note any alerts or notifications
+- Check overall P&L from yesterday
+- Take screenshot
+
+PART 2: Check Alpaca Account
+- Go to Alpaca
+- Check current positions
+- Check account balance
+- Check overnight P&L
+- Take screenshot
+
+PART 3: Market Analysis
+- Go to TradingView
+- Pull up SPY chart (daily timeframe)
+  - Add 20 EMA, 50 EMA, 200 EMA
+  - Add RSI
+  - Add volume
+- Note key support and resistance levels
+- Take screenshot
+
+- Pull up QQQ chart (daily timeframe)
+  - Same indicators as SPY
+- Take screenshot
+
+- Pull up VIX chart
+- Note current VIX level
+- Take screenshot
+
+PART 4: Summary
+Give me a complete summary including:
+- All bot statuses and P&L
+- Alpaca positions and balance
+- Key market levels for SPY/QQQ
+- Current VIX level
+- Any recommended actions for today

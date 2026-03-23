@@ -1,0 +1,9 @@
+Simple test task to verify the system is working.
+
+Please:
+1. Open Firefox
+2. Navigate to google.com
+3. Take a screenshot
+4. Tell me you can see the Google homepage
+
+This is just a quick test to make sure everything is working correctly.
