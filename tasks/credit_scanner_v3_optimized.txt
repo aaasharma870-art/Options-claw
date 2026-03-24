@@ -1,0 +1,346 @@
+CREDIT SCANNER V3 BOT BUILD - OPTION ALPHA
+Phase 1: Regime Classification Only (Notifications, No Trades)
+
+=======================================================================
+IMPORTANT INSTRUCTIONS FOR EXECUTION
+=======================================================================
+
+You are building a complex trading bot in Option Alpha (OA) web interface.
+This will take 30-60 minutes to complete Phase 1.
+
+CRITICAL RULES:
+1. Take a screenshot BEFORE and AFTER every major configuration step
+2. If any UI element is unclear or not found, STOP and describe what you see
+3. Read all text on screen carefully - OA has many similar-looking buttons
+4. After completing each automation section, show me a summary BEFORE proceeding
+5. Use exact names - OA is case-sensitive in some fields
+6. Save frequently - OA can timeout on long sessions
+
+PREREQUISITES:
+- You must already be logged into Option Alpha
+- You should be on the main Dashboard when starting
+- SPY market data should be visible
+
+ESTIMATED TIME: 45-60 minutes for Phase 1
+
+=======================================================================
+PART 1: CREATE THE BOT SHELL
+=======================================================================
+
+STEP 1.1: Navigate to Bot Creation
+1. From OA Dashboard, click "Bots" in the main navigation
+2. Click the "+ New Bot" button (usually top-right)
+3. SCREENSHOT: Take screenshot showing the bot creation dialog
+
+STEP 1.2: Configure Basic Bot Settings
+In the bot creation form, enter EXACTLY:
+
+Field: Bot Name
+Value: Credit Scanner V3 - GEX
+
+Field: Underlying Symbol
+Value: SPY
+Action: Select SPY from dropdown (not /ES, not SPDR, just SPY)
+
+Field: Strategy Type
+Value: Credit Spreads
+(If there's a dropdown with multiple credit spread options, choose "Custom Credit Spreads")
+
+Field: Trading Mode
+Value: PAPER
+⚠️ CRITICAL: Verify "PAPER" is selected, NOT "LIVE"
+SCREENSHOT: Take screenshot showing PAPER mode selected
+
+Field: Brain Bot Connection
+Action: Click "Connect to Brain Bot"
+Select: The same Brain Bot that runs my existing "V2" bot
+(Look for a bot name containing "V2" or "Credit Scanner V2")
+If unsure which Brain Bot to use: STOP and ask me which one
+
+STEP 1.3: Create the Bot
+1. Click "Create Bot" or "Save" button
+2. Wait for confirmation message
+3. SCREENSHOT: Take screenshot of the new bot in your bot list
+4. Click into the new bot to open its configuration page
+
+PAUSE POINT 1: Confirm bot created successfully before proceeding.
+
+=======================================================================
+PART 2: BUILD AUTOMATION 1 - GEX REGIME ROUTER
+=======================================================================
+
+PURPOSE: This automation runs every 30 minutes during market hours,
+reads GEX data, classifies the market into Regime A/B/C, and sends
+a notification. NO TRADES fire from this automation.
+
+ESTIMATED TIME: 25-35 minutes to build this automation
+
+--- STEP 2.1: Create New Automation ---
+
+1. Inside the "Credit Scanner V3 - GEX" bot, find the Automations section
+2. Click "+ Add Automation" or "+ New Automation"
+3. Name it EXACTLY: "GEX Regime Router"
+4. SCREENSHOT: Automation creation dialog
+
+--- STEP 2.2: Set the Trigger (Schedule) ---
+
+Trigger Type: Select "Schedule" or "Recurring"
+
+Configure schedule:
+- Frequency: Every 30 minutes
+- Start Time: 10:00 AM ET (Eastern Time)
+- End Time: 3:00 PM ET (Eastern Time)
+- Days: Monday, Tuesday, Wednesday, Thursday, Friday ONLY
+  (Uncheck Saturday and Sunday if visible)
+
+SCREENSHOT: Take screenshot of the schedule configuration
+
+--- STEP 2.3: Add GATE 1 - Trade Frequency Limits ---
+
+Add a Decision Node (or Filter):
+- Name: "Position Limits Gate"
+- Type: Decision / Conditional Logic
+
+Condition A:
+- Recipe/Monitor: "Bot open positions"
+- Operator: is less than
+- Value: 5
+- Logic: If FALSE → STOP automation (do not proceed)
+
+AND (both must be true)
+
+Condition B:
+- Recipe/Monitor: "Bot positions opened today"
+- Operator: is less than
+- Value: 2
+- Logic: If FALSE → STOP automation (do not proceed)
+
+If BOTH conditions pass → Continue to next step
+If EITHER fails → STOP and exit automation
+
+SCREENSHOT: Decision node configuration showing both conditions
+
+--- STEP 2.4: Add GATE 2 - Economic Calendar Check ---
+
+Add another Decision Node:
+- Name: "Major Events Gate"
+
+Check economic calendar for TODAY:
+- Recipe: Use OA's "Economic Calendar" or "Event Check" recipe
+- Events to block: FOMC, CPI, NFP (Non-Farm Payroll)
+- Logic: If ANY of these events are scheduled TODAY → STOP automation
+
+(OA Implementation Note: If OA doesn't have a native calendar recipe,
+you may need to use a custom tag or manual event marker. If unclear,
+describe what calendar options you see and I'll clarify.)
+
+SCREENSHOT: Event check configuration
+
+--- STEP 2.5: GEX Data Collection (Parallel Checks) ---
+
+Now add THREE data collection steps. These run in parallel or sequence
+depending on OA's automation flow structure.
+
+CHECK 1 - GEX Sentiment:
+- Recipe Name: "GEX Sentiment"
+- Underlying: SPY
+- What it measures: Percentage of positive GEX bars near current price
+- Store result as: Variable "gex_sentiment"
+- This will be a number between 0-100%
+
+CHECK 2 - Price vs Gamma Flip:
+- Recipe Name: "Price vs Gamma Exposure Strike"
+- Strike Type: "Gamma Flip"
+- Underlying: SPY
+- What it measures: Is SPY price ABOVE or BELOW the gamma flip level?
+- Store result as: Variable "price_vs_flip"
+- This will be: "above" or "below"
+
+CHECK 3 - GEX Ratio:
+- Recipe Name: "GEX Ratio"
+- Underlying: SPY
+- What it measures: Ratio of negative to positive gamma exposure
+- Store result as: Variable "gex_ratio"
+- This will be a decimal number (e.g., 0.75, 1.2, etc.)
+
+SCREENSHOT: All three GEX checks configured
+
+--- STEP 2.6: Regime Classification Decision Tree ---
+
+Now build the REGIME DECISION LOGIC using Decision nodes:
+
+REGIME A - POSITIVE GEX (Bullish Structure)
+Conditions (BOTH must be true):
+1. Variable "price_vs_flip" = "above"
+   AND
+2. Variable "gex_sentiment" > 55
+
+If BOTH true → Regime = A (Positive GEX)
+
+Action for Regime A:
+- Send Notification:
+  Title: "GEX Regime Update"
+  Message: "Regime A: Positive GEX detected - Dealers long gamma - Market sticky/mean-reverting"
+- Log to bot history
+- STOP (Phase 1 = notifications only, no trades)
+
+REGIME B - NEGATIVE GEX (Bearish Structure)
+Conditions (EITHER triggers this):
+1. Variable "price_vs_flip" = "below"
+   OR
+2. Variable "gex_sentiment" < 40
+
+If EITHER true → Regime = B (Negative GEX)
+
+Action for Regime B:
+- Send Notification:
+  Title: "GEX Regime Update"
+  Message: "Regime B: Negative GEX detected - Dealers short gamma - Moves accelerate"
+- Log to bot history
+- STOP (Phase 1 = notifications only, no trades)
+
+REGIME C - TRANSITIONAL (No Trade Zone)
+Conditions (EITHER triggers this):
+1. Variable "gex_sentiment" is between 40 and 55 (inclusive)
+   OR
+2. SPY price is within 0.5% of the gamma flip level
+   (Calculate: abs(SPY_price - gamma_flip_price) / SPY_price < 0.005)
+
+If EITHER true → Regime = C (Transitional)
+
+Action for Regime C:
+- Send Notification:
+  Title: "GEX Regime Update"
+  Message: "Regime C: Transitional regime - Inflection point - Scanner paused - NO TRADES"
+- Log to bot history
+- STOP (no trades allowed in transitional regime)
+
+SCREENSHOT: Complete decision tree showing all three regime paths
+
+--- STEP 2.7: Review Automation 1 Structure ---
+
+Before saving, verify the automation flow looks like this:
+
+1. TRIGGER: Schedule (every 30 min, 10am-3pm ET, Mon-Fri)
+   ↓
+2. GATE 1: Position Limits (< 5 open, < 2 today) → If fail: STOP
+   ↓
+3. GATE 2: Calendar Check (no FOMC/CPI/NFP) → If fail: STOP
+   ↓
+4. DATA COLLECTION:
+   - GEX Sentiment → store in variable
+   - Price vs Gamma Flip → store in variable
+   - GEX Ratio → store in variable
+   ↓
+5. DECISION TREE:
+   - Check for Regime A conditions → If true: notify "Regime A" + STOP
+   - Check for Regime B conditions → If true: notify "Regime B" + STOP
+   - Check for Regime C conditions → If true: notify "Regime C" + STOP
+   ↓
+6. END
+
+SCREENSHOT: Full automation flowchart or node list
+
+--- STEP 2.8: Save Automation 1 ---
+
+1. Click "Save Automation" button
+2. Verify no error messages
+3. SCREENSHOT: Saved automation in the automations list
+4. Test the automation:
+   - Click "Test Run" or "Simulate" if OA has that feature
+   - OR wait for the next scheduled run (next 30-min interval)
+
+=======================================================================
+PART 3: VERIFICATION CHECKLIST FOR AUTOMATION 1
+=======================================================================
+
+After building Automation 1, verify:
+
+[ ] Bot name is exactly "Credit Scanner V3 - GEX"
+[ ] Bot is in PAPER mode (not LIVE)
+[ ] Bot is connected to the correct Brain Bot
+[ ] Automation 1 is named "GEX Regime Router"
+[ ] Schedule is set: Every 30 min, 10am-3pm ET, Mon-Fri only
+[ ] Gate 1 checks: open positions < 5 AND positions today < 2
+[ ] Gate 2 checks: no FOMC/CPI/NFP today
+[ ] GEX Sentiment recipe is configured for SPY
+[ ] Price vs Gamma Flip recipe is configured for SPY
+[ ] GEX Ratio recipe is configured for SPY
+[ ] Regime A logic: price above flip AND sentiment > 55%
+[ ] Regime B logic: price below flip OR sentiment < 40%
+[ ] Regime C logic: sentiment 40-55% OR price within 0.5% of flip
+[ ] Each regime sends correct notification message
+[ ] Automation is saved without errors
+
+SCREENSHOT: Final review - show me the complete automation
+
+=======================================================================
+STOPPING POINT - PHASE 1 COMPLETE
+=======================================================================
+
+STOP HERE. Do not build Automations 2-5 yet.
+
+After you complete Automation 1, provide me with:
+
+1. Summary of what was built
+2. All screenshots taken during the process
+3. Any OA UI elements that were unclear or different than expected
+4. Confirmation that the automation is saved and shows in the bot's automation list
+
+I will review the regime classification logic and verify it against
+OA's visual GEX charts for 1-2 weeks before approving Phase 2.
+
+When I give the go-ahead, you will build:
+- Automation 2: Positive GEX - Iron Condor Entry
+- Automation 3: Positive GEX - Directional Spreads
+- Automation 4: Negative GEX - Directional Spreads
+- Automation 5: Regime Shift Monitor
+
+But NOT yet. Phase 1 only for now.
+
+=======================================================================
+REFERENCE: POSITION SIZING (For Future Phases)
+=======================================================================
+
+GEX Sentiment > 65%    → 1.0x Kelly (full size)
+GEX Sentiment 55-65%   → 0.85x Kelly
+GEX Sentiment 40-55%   → 0x (NO TRADE - transitional)
+GEX Sentiment 30-40%   → 0.75x Kelly (reduced)
+GEX Sentiment < 30%    → 0.50x Kelly (half size)
+
+=======================================================================
+REFERENCE: RISK RULES (For Future Phases)
+=======================================================================
+
+1. NEVER trade in Regime C (40-55% GEX Sentiment)
+2. NEVER override GEX regime size multiplier
+3. If regime shift monitor fires 3+ times/day → PAUSE bot
+4. Credit must be ≥30% of spread width (condors) or ≥33% (directional)
+5. All strikes within 5 strikes of high-GEX concentration
+6. V3 total allocation ≤ 40% of OA capital
+
+=======================================================================
+ERROR HANDLING INSTRUCTIONS
+=======================================================================
+
+If at ANY point during this build you encounter:
+
+1. "Recipe not found" → STOP and describe what recipes you see available
+2. "Cannot connect to Brain Bot" → STOP and show me the Brain Bot list
+3. "Schedule option not available" → STOP and describe trigger options
+4. Any error message → STOP, take screenshot, show me the error
+5. Unclear button or field → STOP, take screenshot, describe what you see
+
+DO NOT guess or improvise. OA's UI can vary. If something doesn't match
+these instructions exactly, STOP and ask me for clarification.
+
+=======================================================================
+START BUILDING AUTOMATION 1 NOW
+=======================================================================
+
+Begin with Part 1: Create the bot shell.
+Take screenshots at every step.
+Work carefully and methodically.
+Stop at the Phase 1 completion checkpoint.
+
+Good luck! 🚀

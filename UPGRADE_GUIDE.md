@@ -1,6 +1,44 @@
-# Options-Claw v2.0 Upgrade Guide
+# Options-Claw Upgrade Guide
 
-## Why v2? The 5 Manus AI Patterns
+## v3.0: Three-Tier Hybrid Architecture (Beyond Manus)
+
+v3 goes beyond Manus by exploiting domain-specific knowledge about Option Alpha to eliminate AI for 80%+ of operations. The core principle: **use the cheapest execution tier that can handle each step.**
+
+### Three Tiers
+
+| Tier | Technology | Cost | Speed | When Used |
+|------|-----------|------|-------|-----------|
+| 1 | OA Webhooks + Python | $0 | Instant | Recurring tasks (GEX monitoring, triggers) |
+| 2 | Playwright browser automation | $0 | 30-60s | Bot creation, config, status checks |
+| 3 | Claude Computer Use | $$$ | 5-60 min | Error recovery, novel tasks, first-time setup |
+
+### 5 Beyond-Manus Innovations
+
+1. **Cross-Session Learning DB** (`core/learning_db.py`) — SQLite database persists working selectors, task costs, UI patterns, and error solutions across runs. When Computer Use (Tier 3) discovers a new selector, it's recorded so Playwright (Tier 2) can use it next time. The system literally gets cheaper over time.
+
+2. **Verification Agent** (`core/verifier.py`) — After critical actions, takes ONE screenshot and asks Claude Haiku a yes/no question (~$0.003/check). Catches the "confident but wrong" failure mode without burning Sonnet tokens.
+
+3. **Speculative Execution** (`core/speculative_queue.py`) — Batches multiple Playwright actions before taking a verification screenshot. Instead of click->screenshot->click->screenshot (5 screenshots), it does click->click->click->click->click->screenshot (1 screenshot). 80% fewer screenshots.
+
+4. **Cost-Aware Model Routing** (`core/model_router.py`) — Routes simple navigation to Haiku ($0.25/MTok), medium tasks to Sonnet ($3/MTok), and error recovery to Sonnet with extended thinking. Saves ~40% on AI costs.
+
+5. **Parallel Subtasks** (`core/parallel_executor.py`) — Independent subtasks (e.g., building 5 automations) run simultaneously across multiple Playwright contexts. Subtasks marked with the same `parallel_group` execute concurrently.
+
+### Tier Escalation
+
+When Tier 2 (Playwright) fails — typically because OA changed their UI — it automatically escalates to Tier 3 (Computer Use) for that one step. Computer Use discovers the new selector, which gets recorded in the learning DB. Next time, Tier 2 handles it.
+
+```
+Playwright attempt -> SelectorNotFound -> Computer Use handles it
+                                             |
+                                     Records new selector in DB
+                                             |
+                                     Next time: Playwright succeeds
+```
+
+---
+
+## v2.0: The 5 Manus AI Patterns
 
 [Manus AI](https://manus.im) is the most popular autonomous agent platform. They published lessons from building agents that run complex, multi-step tasks. Options-Claw v2 applies their 5 key architecture patterns to solve specific problems with v1.
 

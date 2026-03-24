@@ -4,148 +4,130 @@
 
 ---
 
-## v2.0: Manus-Style Architecture (NEW)
+## v3.0: Three-Tier Hybrid Architecture (NEW)
 
-Options-Claw v2 applies 5 patterns from [Manus AI](https://manus.im) to make autonomous trading bot building reliable, cheap, and recoverable.
+Options-Claw v3 goes beyond Manus AI patterns by using the **cheapest execution tier** for each operation. 80%+ of tasks run at $0 cost.
 
-### Architecture
+### Architecture: Three Execution Tiers
 
 ```
-                         +-----------------+
-                         |   Task File     |
-                         | (goal-oriented) |
-                         +--------+--------+
-                                  |
-                                  v
-                    +-------------+-------------+
-                    |     PLANNER AGENT          |
-                    |  (text-only, ~$0.01)       |
-                    |  Decomposes into subtasks  |
-                    +-------------+-------------+
-                                  |
-                         JSON subtask list
-                                  |
-              +-------------------+-------------------+
-              |                   |                   |
-              v                   v                   v
-     +--------+------+  +--------+------+  +--------+------+
-     | EXECUTOR #1   |  | EXECUTOR #2   |  | EXECUTOR #N   |
-     | (Computer Use)|  | (Computer Use)|  | (Computer Use)|
-     | Isolated ctx  |  | Isolated ctx  |  | Isolated ctx  |
-     +--------+------+  +--------+------+  +--------+------+
-              |                   |                   |
-              v                   v                   v
-     +--------+------+  +--------+------+  +--------+------+
-     | Result file   |  | Result file   |  | Result file   |
-     +---------------+  +---------------+  +---------------+
-              |                   |                   |
-              +-------------------+-------------------+
-                                  |
-                                  v
-                         +--------+--------+
-                         |   todo.md       |
-                         | (goal recitation|
-                         |  updated each   |
-                         |  subtask)       |
-                         +-----------------+
+                     +-------------------+
+                     |   Orchestrator    |
+                     | (tier routing,    |
+                     |  learning DB,     |
+                     |  verification)    |
+                     +---------+---------+
+                               |
+              classify_tier()  |
+              +----------------+----------------+
+              |                |                |
+              v                v                v
+    +---------+------+ +------+--------+ +-----+---------+
+    | TIER 1: Webhooks| | TIER 2: PW   | | TIER 3: CU    |
+    | $0, instant     | | $0, fast     | | $$$, smart    |
+    | Python + HTTP   | | Playwright   | | Computer Use  |
+    | GEX monitoring, | | Bot creation,| | Error recovery|
+    | signal triggers | | config, check| | novel tasks   |
+    +-----------------+ +--------------+ +---------------+
+              |                |                |
+              +----------------+----------------+
+                               |
+                     +---------+---------+
+                     |   Learning DB     |
+                     | (selectors, costs |
+                     |  patterns, fixes) |
+                     +-------------------+
 ```
 
-### Quick Start (v2)
+### Cost Comparison
+
+| Task | v1 (Computer Use) | v2 (Manus) | v3 (Hybrid) |
+|------|-------------------|------------|-------------|
+| GEX monitoring (per day) | $20-40 | $8-15 | **$0** (webhooks) |
+| Create bot | $8-12 | $2-4 | **$0** (Playwright) |
+| Morning routine | $1-2 | $0.30-0.60 | **$0.01** (PW + Haiku) |
+| Complex novel task | $8-12 | $2-4 | **$0.50-2** (PW + CU fallback) |
+| **Monthly (20 tasks/day)** | **$400+** | **$100-200** | **$10-30** |
+
+### 5 Beyond-Manus Innovations
+
+1. **Cross-Session Learning DB** — Remembers working selectors, costs, patterns across runs
+2. **Verification Agent** — Haiku ($0.003/check) verifies critical actions via screenshot
+3. **Speculative Execution** — Batches 5 actions per screenshot instead of 1:1
+4. **Cost-Aware Model Routing** — Haiku for simple nav, Sonnet for complex tasks
+5. **Parallel Subtasks** — Independent automations build simultaneously
+
+### Quick Start
 
 ```powershell
-# 1. Clone and set up API key
+# 1. Clone and configure
 git clone https://github.com/aaasharma870-art/Options-claw.git
 cd Options-claw
 cp .env.template .env
-# Edit .env with your Anthropic API key
+# Edit .env: set ANTHROPIC_API_KEY and optionally POLYGON_API_KEY
 
-# 2. Run a task with Manus-style execution
-cd Documents\AryanClawWorkspace
-.\run-task-v2.ps1 -TaskFile tasks\credit_scanner_v3_manus.txt
+# 2. Run via orchestrator (routes to cheapest tier automatically)
+python -c "import asyncio; from core.orchestrator import run_task; asyncio.run(run_task('Check my OA bots'))"
 
-# 3. Preview the plan without executing
-.\run-task-v2.ps1 -TaskFile tasks\credit_scanner_v3_manus.txt -PlanOnly
+# 3. Or use individual tiers directly:
 
-# 4. Watch it work (optional)
-# Open http://localhost:6080 in browser
+# Tier 1: GEX regime check (free, no AI)
+python tier1_webhooks/gex_regime_engine.py --dry-run
+
+# Tier 2: Discover OA selectors (free, interactive)
+pip install playwright && playwright install chromium
+python tier2_playwright/selector_discovery.py
+
+# Tier 3: Computer Use fallback (via Docker)
+cd tier3_computer_use
+.\run-task-v2.ps1 -TaskFile ..\tasks\credit_scanner_v3_manus.txt
 ```
 
-### 5 Manus Patterns Applied
+### Security
 
-| Pattern | Problem Solved | Impact |
-|---------|---------------|--------|
-| Planner/Executor split | Goal drift on long tasks | Each subtask has fresh context |
-| todo.md goal recitation | Forgetting instructions mid-task | Plan always in recent attention |
-| Context compression | Screenshots bloat context | 3 max instead of unbounded |
-| File-based memory | Results clog context window | Saved to disk, summaries in context |
-| Error preservation | Repeating same mistakes | Errors kept so Claude learns |
-
-### Security Note
-
-**IMPORTANT:** Create a `.env` file from `.env.template` before running. Never commit API keys.
-
-See [UPGRADE_GUIDE.md](UPGRADE_GUIDE.md) for full details on v2 architecture, migration, and cost savings.
+- **No API keys in code** — all secrets in `.env` (excluded by `.gitignore`)
+- Session cookies saved to `data/session_cookies.json` (gitignored)
+- Webhook URLs in `tier1_webhooks/webhook_config.json` (optionally gitignored)
 
 ---
 
-## v1.0: Direct API Execution (Legacy)
-
-The original system that bypasses Streamlit and calls the Computer Use API directly. Still works for simple tasks.
-
-```powershell
-cd Documents\AryanClawWorkspace
-.\run-task.ps1 "Check my Option Alpha bots"
-.\run-task.ps1 -TaskFile tasks\simple_test.txt
-```
-
-### What It Does
-
-Options-Claw is an AI agent that:
-- Autonomously builds complex trading bots in Option Alpha with 50+ configuration parameters
-- Monitors real-time market data using Gamma Exposure (GEX) analysis for regime classification
-- Executes sophisticated strategies including Iron Condors and directional credit spreads
-- Manages risk automatically using position sizing, stop losses, and regime shift detection
-
-### System Architecture (v1)
+## Project Structure
 
 ```
-User -> PowerShell Script (run-task.ps1)
-            |
-            v
-       Docker Container
-       +-> Python Task Runner (direct_task_runner.py)
-       +-> Anthropic SDK (sampling_loop)
-       +-> Virtual Desktop (Firefox + Option Alpha)
-            |
-            v
-       Claude API (Computer Use)
+Options-claw/
++-- .gitignore, .env.template
++-- README.md, UPGRADE_GUIDE.md
+|
++-- core/                         <-- v3 hybrid engine
+|   +-- orchestrator.py           Main brain (tier routing)
+|   +-- model_router.py           Cost-aware model selection
+|   +-- verifier.py               Haiku screenshot verification
+|   +-- learning_db.py            Cross-session SQLite memory
+|   +-- speculative_queue.py      Batch actions, reduce screenshots
+|   +-- parallel_executor.py      Run subtasks simultaneously
+|   +-- config.py                 Central config
+|
++-- tier1_webhooks/               <-- $0 webhook execution
+|   +-- webhook_manager.py        Send/manage OA webhook calls
+|   +-- gex_regime_engine.py      GEX calculation + regime classification
+|   +-- webhook_config.json       Webhook URLs per automation
+|   +-- cron_setup.md             How to schedule
+|
++-- tier2_playwright/             <-- $0 browser automation
+|   +-- playwright_runner.py      Base class (login, nav, forms)
+|   +-- selector_discovery.py     Interactive selector finder
+|   +-- ui_selectors.json         All known OA selectors
+|   +-- actions/                  Playwright action modules
+|
++-- tier3_computer_use/           <-- Smart fallback
+|   +-- manus_task_runner.py      v2 Manus-style runner
+|   +-- computer_use_fallback.py  Single-step fallback wrapper
+|   +-- run-task-v2.ps1           PowerShell launcher
+|
++-- tasks/                        <-- Task files
++-- data/                         <-- Runtime state (gitignored)
++-- legacy/                       <-- v1 system (reference)
 ```
-
-### Performance (v1)
-
-| Metric | Before Optimization | After Optimization |
-|--------|---------------------|-------------------|
-| Task Success Rate | 20% | 95% |
-| Max Task Duration | 5 minutes | Unlimited |
-| Disconnection Rate | 60-90% | 0% |
-
----
-
-## Real-World Application: Credit Scanner V3
-
-### GEX-Based Regime Classification
-
-- **Regime A (Positive GEX):** Market is sticky -> Trade Iron Condors
-- **Regime B (Negative GEX):** Trends accelerate -> Trade directional spreads
-- **Regime C (Transitional):** No clear structure -> No trades (risk management)
-
-### 5 Automations
-
-1. **GEX Regime Router** - Runs every 30 min, classifies market
-2. **Positive GEX - Iron Condor** - Profits from range-bound behavior
-3. **Positive GEX - Directional** - Mild directional bias trades
-4. **Negative GEX - Directional** - Trend-following trades
-5. **Regime Shift Monitor** - Exit protection, runs every 5 min
 
 ---
 
@@ -153,24 +135,22 @@ User -> PowerShell Script (run-task.ps1)
 
 | Document | Purpose |
 |----------|---------|
-| [UPGRADE_GUIDE.md](UPGRADE_GUIDE.md) | v2 architecture, migration, cost savings |
-| [START.md](Documents/AryanClawWorkspace/START.md) | Getting started guide |
-| [WHATS_FIXED.md](Documents/AryanClawWorkspace/WHATS_FIXED.md) | Technical deep dive on all optimizations |
-| [QUICK_REFERENCE.md](Documents/AryanClawWorkspace/QUICK_REFERENCE.md) | Command cheat sheet |
+| [UPGRADE_GUIDE.md](UPGRADE_GUIDE.md) | v2 Manus patterns + v3 hybrid architecture |
+| [tier1_webhooks/cron_setup.md](tier1_webhooks/cron_setup.md) | Deploy GEX engine to cron |
+| [legacy/START.md](legacy/START.md) | Original v1 getting started guide |
 
-## Prerequisites
+## Real-World Application: Credit Scanner V3
 
-- Windows 10/11 with PowerShell
-- Docker Desktop installed
-- Anthropic API key (set in `.env` file)
-
----
+GEX-based regime classification driving 5 interconnected automations:
+- **Positive GEX** -> Iron Condors (range-bound) + Directional spreads
+- **Negative GEX** -> Wide directional spreads (trend-following)
+- **Transitional** -> No trades, reduce risk
+- **Regime Shift Monitor** -> Exit protection every 5 minutes
 
 ## Contact
 
-**Aryan Sharma**
-- GitHub: [@aaasharma870-art](https://github.com/aaasharma870-art)
+**Aryan Sharma** — [@aaasharma870-art](https://github.com/aaasharma870-art)
 
 ## License
 
-This project is for educational and portfolio purposes. Not intended for production trading use without extensive additional testing and risk management.
+Educational and portfolio purposes. Not intended for production trading without additional testing and risk management.

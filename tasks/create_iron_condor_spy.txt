@@ -1,0 +1,36 @@
+Create a new Iron Condor bot in Option Alpha for SPY with these specifications:
+
+Strategy: Iron Condor
+Symbol: SPY
+Bot Name: "SPY Iron Condor - Auto"
+
+ENTRY CONDITIONS:
+- DTE Range: 30 to 45 days
+- VIX Filter: Enter only when VIX is between 15 and 25
+- Opening Order: Market order
+
+POSITION SIZING:
+- Max position size: $500 per trade
+- Max open positions: 3
+
+POSITION STRUCTURE:
+- Target Delta: 0.16 on short strikes
+- Wing Width: $5 (for both call and put sides)
+
+EXIT CONDITIONS:
+- Profit Target: 50% of credit received
+- Stop Loss: 200% of credit received
+- DTE Exit: Close at 21 DTE if not already closed
+
+MANAGEMENT:
+- Enable automation: YES
+- Auto-roll disabled
+- Monitor: Daily
+
+FINAL STEPS:
+1. Review all settings carefully
+2. Take a screenshot of the configuration BEFORE saving
+3. Save the bot
+4. Verify the bot appears in the dashboard
+5. Take a screenshot of the bot in the active bots list
+6. Give me a summary of the bot settings

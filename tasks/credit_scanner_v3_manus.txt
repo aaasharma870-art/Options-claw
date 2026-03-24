@@ -1,0 +1,83 @@
+CREDIT SCANNER V3 - GEX REGIME BOT (v2 Manus-Style Task)
+=========================================================
+
+OBJECTIVE:
+Build a Paper-mode bot named "Credit Scanner V3 - GEX" for SPY in Option Alpha.
+This bot uses Gamma Exposure (GEX) analysis to classify market regimes and trade
+the appropriate credit spread strategy for each regime.
+
+PREREQUISITES:
+- Already logged into Option Alpha at https://optionalpha.com
+- On the main Dashboard
+- SPY market data visible
+
+BOT CONFIGURATION:
+- Name: Credit Scanner V3 - GEX
+- Symbol: SPY
+- Strategy type: Custom Credit Spreads
+- Mode: PAPER (CRITICAL - verify Paper mode is selected, NOT live)
+- Connect to Brain Bot if available (for signal routing)
+
+AUTOMATIONS TO BUILD (5 total):
+
+1. GEX Regime Router
+   - Trigger: Every 30 minutes during market hours (9:30 AM - 3:30 PM ET)
+   - Logic: Check current GEX level for SPY
+     - If GEX > 0 (positive): Set regime = "POSITIVE_GEX"
+     - If GEX < 0 (negative): Set regime = "NEGATIVE_GEX"
+     - If GEX near zero (transitional): Set regime = "TRANSITIONAL"
+   - Action: Send notification with current regime classification
+   - Checkpoint: Confirm automation runs and sends a test notification
+
+2. Positive GEX - Iron Condor
+   - Trigger: When regime = POSITIVE_GEX (from Router)
+   - Strategy: Sell iron condor on SPY
+     - Short put delta: 0.16
+     - Short call delta: 0.16
+     - Wing width: $3
+     - DTE: 1-3 days (0DTE to 3DTE)
+   - Entry: Only if IV rank > 20
+   - Exit: 50% profit target OR 100% stop loss on credit received
+   - Checkpoint: Verify automation has correct delta and wing parameters
+
+3. Positive GEX - Directional Credit Spread
+   - Trigger: When regime = POSITIVE_GEX with directional bias
+   - Strategy: Sell put credit spread on SPY
+     - Short put delta: 0.20
+     - Wing width: $3
+     - DTE: 1-5 days
+   - Entry: Only during positive momentum
+   - Exit: 50% profit target OR 75% stop loss
+   - Checkpoint: Verify delta and spread width
+
+4. Negative GEX - Directional Spread
+   - Trigger: When regime = NEGATIVE_GEX (from Router)
+   - Strategy: Sell wider credit spread (trend-following)
+     - Short delta: 0.25
+     - Wing width: $5 (wider for protection)
+     - DTE: 3-7 days (longer for negative GEX)
+   - Entry: Follow trend direction (puts if bearish, calls if bullish)
+   - Exit: 40% profit target OR 100% stop loss
+   - Checkpoint: Verify wider wings and longer DTE vs positive GEX automations
+
+5. Regime Shift Monitor
+   - Trigger: Every 5 minutes during market hours
+   - Logic: Check if regime changed since last check
+   - Action on regime shift:
+     - Send alert notification
+     - Close any positions from the OLD regime's automations
+     - Pause old regime automations
+     - Enable new regime automations
+   - Checkpoint: Verify monitoring interval is 5 minutes, not 30
+
+RISK MANAGEMENT:
+- Max concurrent positions: 3
+- Daily loss limit: 5% of paper account value
+- Max drawdown: 40%
+- Position sizing: Kelly Criterion with 0.5x-1.0x multiplier based on regime confidence
+
+FINAL VERIFICATION:
+- Screenshot each automation after creation
+- Confirm bot is in PAPER mode (not live!)
+- Leave bot PAUSED after setup (do not activate)
+- Show final summary of all 5 automations
