@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Results and logs (generated at runtime)
+results/
+*.log
+
+# Session and runtime data
+data/session_cookies.json
+data/learning.db
+data/gex_history.jsonl
+tier2_playwright/recordings/
+
+# Webhook config may contain secret URLs
+# Uncomment if your webhook URLs are sensitive:
+# tier1_webhooks/webhook_config.json
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

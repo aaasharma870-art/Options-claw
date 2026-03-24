@@ -1,0 +1,15 @@
+Check my Option Alpha bots.
+
+For each bot, please:
+1. Show the bot name
+2. Show if it's active or paused
+3. Show the current P&L
+4. Show any open positions
+
+At the end, give me a summary of:
+- Total number of bots
+- How many are active
+- Overall P&L across all bots
+- Any bots that need attention
+
+Take a screenshot of the main dashboard showing all bots.

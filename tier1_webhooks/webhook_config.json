@@ -1,0 +1,24 @@
+{
+  "webhooks": {
+    "gex_regime_router": {
+      "url": "https://app.optionalpha.com/api/webhooks/YOUR_HOOK_ID_HERE",
+      "description": "Triggers GEX regime classification in OA"
+    },
+    "positive_gex_iron_condor": {
+      "url": "https://app.optionalpha.com/api/webhooks/YOUR_HOOK_ID_HERE",
+      "description": "Triggers Iron Condor automation for positive GEX regime"
+    },
+    "positive_gex_directional": {
+      "url": "https://app.optionalpha.com/api/webhooks/YOUR_HOOK_ID_HERE",
+      "description": "Triggers directional spread for positive GEX regime"
+    },
+    "negative_gex_directional": {
+      "url": "https://app.optionalpha.com/api/webhooks/YOUR_HOOK_ID_HERE",
+      "description": "Triggers directional spread for negative GEX regime"
+    },
+    "regime_shift_monitor": {
+      "url": "https://app.optionalpha.com/api/webhooks/YOUR_HOOK_ID_HERE",
+      "description": "Triggers regime shift check and position management"
+    }
+  }
+}

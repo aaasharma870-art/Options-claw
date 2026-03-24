@@ -1,0 +1,41 @@
+{
+  "dashboard": {
+    "bots_nav": "a[href*='/bots']",
+    "settings_nav": "a[href*='/settings']",
+    "new_bot_button": "button:has-text('New Bot')"
+  },
+  "bot_creation": {
+    "bot_name_input": "input[name='botName'], input[placeholder*='Bot Name'], input[placeholder*='bot name']",
+    "symbol_input": "input[name='symbol'], input[placeholder*='Symbol'], input[placeholder*='symbol']",
+    "symbol_dropdown_item": ".dropdown-item:has-text('SPY'), [role='option']:has-text('SPY')",
+    "strategy_type_select": "select[name='strategyType'], [data-field='strategyType']",
+    "paper_mode_toggle": "[data-mode='paper'], button:has-text('Paper'), label:has-text('Paper')",
+    "live_mode_toggle": "[data-mode='live'], button:has-text('Live')",
+    "create_button": "button:has-text('Create'), button[type='submit']:has-text('Create')",
+    "save_button": "button:has-text('Save'), button[type='submit']"
+  },
+  "bot_config": {
+    "automations_tab": "a:has-text('Automations'), button:has-text('Automations'), [data-tab='automations']",
+    "add_automation_button": "button:has-text('Add Automation'), button:has-text('New Automation')",
+    "automation_name_input": "input[name='automationName'], input[placeholder*='Automation']",
+    "trigger_select": "select[name='trigger'], [data-field='trigger']",
+    "interval_input": "input[name='interval'], input[type='number'][name*='interval']",
+    "condition_builder": ".condition-builder, [data-component='conditions']",
+    "save_automation_button": "button:has-text('Save Automation'), button:has-text('Save')"
+  },
+  "bot_dashboard": {
+    "bot_status": ".bot-status, [data-field='status']",
+    "bot_pnl": ".bot-pnl, [data-field='pnl']",
+    "bot_mode": ".bot-mode, [data-field='mode']",
+    "pause_button": "button:has-text('Pause'), button:has-text('Stop')",
+    "resume_button": "button:has-text('Resume'), button:has-text('Start'), button:has-text('Activate')",
+    "automations_list": ".automations-list, [data-component='automations']"
+  },
+  "common": {
+    "confirm_modal_yes": ".modal button:has-text('Yes'), .modal button:has-text('Confirm'), .modal button:has-text('OK')",
+    "confirm_modal_no": ".modal button:has-text('No'), .modal button:has-text('Cancel')",
+    "close_modal": ".modal button:has-text('Close'), .modal .close-button, button[aria-label='Close']",
+    "error_message": ".error-message, .alert-danger, [role='alert']",
+    "success_message": ".success-message, .alert-success, .toast-success"
+  }
+}
