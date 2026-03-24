@@ -94,8 +94,24 @@ if ($containerRunning -ne "aryan-claw-local") {
     # Stop old container if exists
     docker rm -f aryan-claw-local 2>$null | Out-Null
 
-    # Start Computer Use container
-    $apiKey = "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"
+    # Read API key from environment or .env file (see .env.template)
+    $apiKey = $env:ANTHROPIC_API_KEY
+    if (-not $apiKey) {
+        $envFile = Join-Path $PSScriptRoot ".env"
+        if (Test-Path $envFile) {
+            Get-Content $envFile | ForEach-Object {
+                if ($_ -match "^ANTHROPIC_API_KEY=(.+)$") {
+                    $apiKey = $matches[1].Trim()
+                }
+            }
+        }
+    }
+    if (-not $apiKey) {
+        Write-Host "      ERROR: Set ANTHROPIC_API_KEY in environment or .env file" -ForegroundColor Red
+        Write-Host "      Copy .env.template to .env and add your key" -ForegroundColor Yellow
+        exit 1
+    }
+
     $anthropicDir = Join-Path $env:USERPROFILE ".anthropic"
     $workspaceDir = Join-Path $env:USERPROFILE "Documents\AryanClawWorkspace"
 

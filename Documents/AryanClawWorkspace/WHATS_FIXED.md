@@ -1,4 +1,6 @@
-# 🔧 What Was Fixed in AryanClaw
+# What Was Fixed in AryanClaw
+
+> **v2.0 Update:** Options-Claw now includes a Manus-style architecture (see [UPGRADE_GUIDE.md](../../UPGRADE_GUIDE.md)) that adds planner/executor split, goal recitation, context compression, file-based memory, and error preservation. Use `run-task-v2.ps1` for complex tasks. The fixes below (v1) still apply and v1 still works for simple tasks.
 
 ## Summary
 Your AryanClaw system has been **completely rebuilt** for simplicity and reliability. All the issues you mentioned have been addressed.

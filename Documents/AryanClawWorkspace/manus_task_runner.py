@@ -20,6 +20,7 @@ import sys
 import os
 import json
 import time
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +34,21 @@ MAX_SCREENSHOTS_IN_CONTEXT = 3  # Manus pattern: only keep N most recent
 MAX_SUBTASK_RETRIES = 2
 RESULTS_DIR = "/tmp/options_claw_results"
 TODO_FILE = "/tmp/options_claw_todo.md"
+LOG_FILE = "/tmp/options_claw_execution.log"
+
+# ============================================================
+# LOGGING SETUP
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, mode='w'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+log = logging.getLogger("options-claw")
 
 # Stable system prefix (never changes -> maximizes KV-cache hits)
 # This is the #1 cost optimization from Manus
@@ -52,6 +68,77 @@ Focus ONLY on the current subtask. Do not try to do the entire plan.
 When this subtask is complete, say "SUBTASK_COMPLETE" and summarize what was done.
 If you encounter an error you cannot recover from, say "SUBTASK_FAILED" and explain why.
 """
+
+
+# ============================================================
+# COST TRACKER
+# ============================================================
+
+class CostTracker:
+    """Track API calls and estimate costs per subtask."""
+
+    # Approximate pricing (per 1M tokens)
+    INPUT_COST_PER_M = 3.00   # Claude Sonnet input
+    OUTPUT_COST_PER_M = 15.00  # Claude Sonnet output
+    CACHED_INPUT_COST_PER_M = 0.30  # Cached input (10x cheaper)
+
+    def __init__(self):
+        self.subtask_stats = {}
+        self.total_api_calls = 0
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+
+    def start_subtask(self, subtask_id: int):
+        self.subtask_stats[subtask_id] = {
+            "api_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "start_time": time.time()
+        }
+
+    def record_api_call(self, subtask_id: int, response=None):
+        self.total_api_calls += 1
+        stats = self.subtask_stats.get(subtask_id, {})
+        stats["api_calls"] = stats.get("api_calls", 0) + 1
+
+        if response and hasattr(response, 'usage'):
+            input_tok = getattr(response.usage, 'input_tokens', 0)
+            output_tok = getattr(response.usage, 'output_tokens', 0)
+            stats["input_tokens"] = stats.get("input_tokens", 0) + input_tok
+            stats["output_tokens"] = stats.get("output_tokens", 0) + output_tok
+            self.total_input_tokens += input_tok
+            self.total_output_tokens += output_tok
+
+    def end_subtask(self, subtask_id: int):
+        stats = self.subtask_stats.get(subtask_id, {})
+        stats["end_time"] = time.time()
+        stats["duration_s"] = stats["end_time"] - stats.get("start_time", stats["end_time"])
+
+    def summary(self) -> str:
+        est_input_cost = (self.total_input_tokens / 1_000_000) * self.INPUT_COST_PER_M
+        est_output_cost = (self.total_output_tokens / 1_000_000) * self.OUTPUT_COST_PER_M
+        est_total = est_input_cost + est_output_cost
+
+        lines = [
+            "\nCOST SUMMARY",
+            "-" * 40,
+            f"  Total API calls:    {self.total_api_calls}",
+            f"  Input tokens:       ~{self.total_input_tokens:,}",
+            f"  Output tokens:      ~{self.total_output_tokens:,}",
+            f"  Estimated cost:     ~${est_total:.2f}",
+            f"    (input: ${est_input_cost:.2f}, output: ${est_output_cost:.2f})",
+            "",
+            "  Per subtask:"
+        ]
+        for sid, stats in self.subtask_stats.items():
+            dur = stats.get("duration_s", 0)
+            calls = stats.get("api_calls", 0)
+            lines.append(f"    Subtask {sid}: {calls} calls, {dur:.0f}s")
+        lines.append("-" * 40)
+        return "\n".join(lines)
+
+
+cost_tracker = CostTracker()
 
 
 # ============================================================
@@ -96,6 +183,12 @@ Respond ONLY with the JSON array, no other text."""
         messages=[{"role": "user", "content": planning_prompt}]
     )
 
+    # Track planner cost
+    if hasattr(response, 'usage'):
+        cost_tracker.total_input_tokens += getattr(response.usage, 'input_tokens', 0)
+        cost_tracker.total_output_tokens += getattr(response.usage, 'output_tokens', 0)
+        cost_tracker.total_api_calls += 1
+
     # Parse the plan
     plan_text = response.content[0].text.strip()
 
@@ -109,7 +202,7 @@ Respond ONLY with the JSON array, no other text."""
         subtasks = json.loads(plan_text)
     except json.JSONDecodeError:
         # Fallback: treat entire task as one subtask
-        print("Warning: Planner returned non-JSON. Using single-subtask fallback.")
+        log.warning("Planner returned non-JSON. Using single-subtask fallback.")
         subtasks = [{
             "id": 1,
             "title": "Execute full task",
@@ -203,13 +296,17 @@ def compress_messages(messages: list, max_screenshots: int = MAX_SCREENSHOTS_IN_
 # in the context window. The executor can read files when needed.
 # ============================================================
 
-def save_subtask_result(subtask_id: int, title: str, result: str):
-    """Save subtask result to file (external memory)."""
+def save_subtask_result(subtask_id: int, title: str, result: str,
+                        start_time: float, end_time: float):
+    """Save subtask result to file (external memory) with timestamps."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
     result_file = os.path.join(RESULTS_DIR, f"subtask_{subtask_id}_{title.replace(' ', '_')}.txt")
+    duration = end_time - start_time
     with open(result_file, 'w') as f:
         f.write(f"# Subtask {subtask_id}: {title}\n")
-        f.write(f"# Completed: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(f"# Started:   {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}\n")
+        f.write(f"# Completed: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}\n")
+        f.write(f"# Duration:  {duration:.0f}s ({duration/60:.1f} min)\n\n")
         f.write(result)
     return result_file
 
@@ -220,7 +317,8 @@ def save_subtask_result(subtask_id: int, title: str, result: str):
 # Errors are LEFT in context (not hidden) so Claude learns.
 # ============================================================
 
-async def execute_subtask(subtask: dict, todo_context: str, api_key: str) -> tuple[bool, str]:
+async def execute_subtask(subtask: dict, todo_context: str, api_key: str,
+                          previous_error: str = None) -> tuple[bool, str]:
     """Execute a single subtask with Computer Use, isolated context."""
     sys.path.insert(0, '/home/computeruse')
     from computer_use_demo.loop import sampling_loop, APIProvider
@@ -240,6 +338,14 @@ async def execute_subtask(subtask: dict, todo_context: str, api_key: str) -> tup
 When done, say SUBTASK_COMPLETE and summarize what was accomplished.
 If stuck, say SUBTASK_FAILED and explain the blocker."""
 
+    # Pattern 5: If retrying, append the previous error so Claude learns
+    if previous_error:
+        prompt += f"""
+
+## PREVIOUS ATTEMPT FAILED
+The error was: {previous_error}
+Please try a different approach."""
+
     messages = [{"role": "user", "content": prompt}]
     step_count = 0
     result_text = ""
@@ -254,35 +360,32 @@ If stuck, say SUBTASK_FAILED and explain the blocker."""
                     # Check for completion signals
                     if "SUBTASK_COMPLETE" in text or "SUBTASK_FAILED" in text:
                         status = "COMPLETE" if "COMPLETE" in text else "FAILED"
-                        print(f"\n[{status}] {text[:200]}")
+                        log.info(f"[{status}] {text[:200]}")
                     else:
-                        print(f"\n[thinking] {text[:150]}")
+                        log.info(f"[thinking] {text[:150]}")
             elif content_block.get("type") == "tool_use":
                 step_count += 1
                 tool_name = content_block.get('name', '')
                 tool_input = content_block.get('input', {})
                 if tool_name == "computer":
                     action = tool_input.get('action', '')
-                    symbols = {
-                        "screenshot": "[screenshot]", "mouse_move": "[mouse]",
-                        "left_click": "[click]", "type": "[type]", "key": "[key]"
-                    }
-                    symbol = symbols.get(action, "[tool]")
                     detail = ""
                     if action == "type":
                         detail = f": {tool_input.get('text', '')[:40]}..."
                     elif action == "key":
                         detail = f": {tool_input.get('text', '')}"
-                    print(f"  {symbol} Step {step_count}: {action}{detail}")
+                    log.info(f"  Step {step_count}: {action}{detail}")
 
     def tool_output_callback(result, tool_use_id):
         # Pattern 5: Leave errors in context (don't suppress them)
         if result.error:
-            print(f"  [error] Error (kept in context for learning): {result.error[:100]}")
+            log.warning(f"  Error (kept in context for learning): {result.error[:100]}")
 
     def api_response_callback(request, response, error):
         if error:
-            print(f"\n[api-error] API Error: {error}")
+            log.error(f"API Error: {error}")
+        else:
+            cost_tracker.record_api_call(subtask["id"], response)
 
     try:
         final_messages = await sampling_loop(
@@ -318,83 +421,103 @@ async def run_task(task_prompt: str):
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not found in environment")
+        log.error("ANTHROPIC_API_KEY not found in environment")
         return
 
-    print("OPTIONS-CLAW v2.0 (MANUS-STYLE AGENT)")
-    print("=" * 60)
+    task_start = time.time()
+    log.info("OPTIONS-CLAW v2.0 (MANUS-STYLE AGENT)")
+    log.info("=" * 60)
 
     # ---- PHASE 1: PLAN ----
-    print("\n[PHASE 1] Planning (decomposing task into subtasks)...")
+    log.info("[PHASE 1] Planning (decomposing task into subtasks)...")
     subtasks = await plan_task(task_prompt, api_key)
     total_est = sum(t.get("estimated_minutes", 10) for t in subtasks)
-    print(f"   Plan created: {len(subtasks)} subtasks, ~{total_est} min estimated")
+    log.info(f"   Plan created: {len(subtasks)} subtasks, ~{total_est} min estimated")
     for t in subtasks:
-        print(f"      {t['id']}. {t['title']} (~{t.get('estimated_minutes', '?')} min)")
+        log.info(f"      {t['id']}. {t['title']} (~{t.get('estimated_minutes', '?')} min)")
 
     # ---- PHASE 2: EXECUTE WITH TRACKING ----
-    print(f"\n[PHASE 2] Executing {len(subtasks)} subtasks...")
+    log.info(f"[PHASE 2] Executing {len(subtasks)} subtasks...")
     results = {}
     failed_tasks = []
 
     for idx, subtask in enumerate(subtasks):
-        print(f"\n{'=' * 60}")
-        print(f"SUBTASK {subtask['id']}/{len(subtasks)}: {subtask['title']}")
-        print(f"{'=' * 60}")
+        log.info(f"\n{'=' * 60}")
+        log.info(f"SUBTASK {subtask['id']}/{len(subtasks)}: {subtask['title']}")
+        log.info(f"{'=' * 60}")
 
         # Pattern 2: Update todo.md for goal recitation
         todo_context = write_todo(subtasks, idx, results)
 
+        # Start cost tracking for this subtask
+        cost_tracker.start_subtask(subtask["id"])
+        subtask_start = time.time()
+
         # Execute with retry
         success = False
+        previous_error = None
         for attempt in range(MAX_SUBTASK_RETRIES + 1):
             if attempt > 0:
-                print(f"\n[retry] Retry {attempt}/{MAX_SUBTASK_RETRIES}...")
+                log.info(f"[retry] Retry {attempt}/{MAX_SUBTASK_RETRIES}...")
 
             success, result_text = await execute_subtask(
-                subtask, todo_context, api_key
+                subtask, todo_context, api_key, previous_error=previous_error
             )
 
             if success:
                 break
             elif attempt < MAX_SUBTASK_RETRIES:
-                # Pattern 5: Error is already in the result_text
-                print(f"   [warning] Subtask failed, will retry. Error preserved for learning.")
+                # Pattern 5: Preserve error for next attempt
+                previous_error = result_text[-500:] if len(result_text) > 500 else result_text
+                log.warning("Subtask failed, will retry. Error preserved for learning.")
 
-        # Pattern 4: Save result to file
-        result_summary = result_text[-500:] if len(result_text) > 500 else result_text
-        result_file = save_subtask_result(subtask["id"], subtask["title"], result_text)
+        subtask_end = time.time()
+        cost_tracker.end_subtask(subtask["id"])
+
+        # Pattern 4: Save result to file with timestamps
+        result_file = save_subtask_result(
+            subtask["id"], subtask["title"], result_text,
+            subtask_start, subtask_end
+        )
 
         if success:
             results[subtask["id"]] = f"Completed. Details in {result_file}"
-            print(f"\n   [done] Subtask {subtask['id']} complete -> saved to {result_file}")
+            log.info(f"[done] Subtask {subtask['id']} complete -> saved to {result_file}")
         else:
             results[subtask["id"]] = f"FAILED after {MAX_SUBTASK_RETRIES + 1} attempts"
             failed_tasks.append(subtask)
-            print(f"\n   [failed] Subtask {subtask['id']} failed after retries")
+            log.error(f"Subtask {subtask['id']} failed after retries")
 
-            # Ask: should we continue or abort?
             if idx < len(subtasks) - 1:
-                print(f"   [warning] Continuing to next subtask despite failure...")
+                log.warning("Continuing to next subtask despite failure...")
 
     # ---- PHASE 3: SUMMARY ----
-    print(f"\n{'=' * 60}")
-    print("EXECUTION SUMMARY")
-    print(f"{'=' * 60}")
+    task_end = time.time()
+    task_duration = task_end - task_start
+
+    log.info(f"\n{'=' * 60}")
+    log.info("EXECUTION SUMMARY")
+    log.info(f"{'=' * 60}")
 
     # Final todo update
     write_todo(subtasks, len(subtasks), results)
 
     completed = len(subtasks) - len(failed_tasks)
-    print(f"   Completed: {completed}/{len(subtasks)}")
+    log.info(f"   Completed: {completed}/{len(subtasks)}")
     if failed_tasks:
-        print(f"   Failed: {len(failed_tasks)}")
+        log.info(f"   Failed: {len(failed_tasks)}")
         for t in failed_tasks:
-            print(f"      - {t['title']}")
+            log.info(f"      - {t['title']}")
 
-    print(f"\n   Results saved in: {RESULTS_DIR}/")
-    print(f"   Todo file: {TODO_FILE}")
-    print(f"\nTo resume failed tasks, run with the specific subtask description")
+    log.info(f"   Total duration: {task_duration:.0f}s ({task_duration/60:.1f} min)")
+    log.info(f"   Results saved in: {RESULTS_DIR}/")
+    log.info(f"   Todo file: {TODO_FILE}")
+    log.info(f"   Execution log: {LOG_FILE}")
+
+    # Cost summary
+    log.info(cost_tracker.summary())
+
+    log.info("To resume failed tasks, run with the specific subtask description")
 
 
 if __name__ == "__main__":
